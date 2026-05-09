@@ -7,12 +7,13 @@ import { Loader2, MapPin, Navigation } from 'lucide-react';
 const MAPS_KEY = process.env.GOOGLE_MAPS_PLATFORM_KEY || "";
 const hasValidKey = Boolean(MAPS_KEY) && MAPS_KEY !== 'YOUR_API_KEY';
 
-function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius }: { 
+function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius, onSearchStatus }: { 
   urgency: UrgencyLevel, 
   onSelect: (f: FaskesLocation) => void,
   onHospitalsFound?: (h: FaskesLocation[]) => void,
   refreshTrigger?: number,
-  radius?: number
+  radius?: number,
+  onSearchStatus?: (loading: boolean) => void
 }) {
   const map = useMap();
   const placesLib = useMapsLibrary('places');
@@ -20,13 +21,19 @@ function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!placesLib || !map) return;
+    // We signal loading as long as we don't have the map/placesLib yet if we're intending to fetch
+    if (!placesLib || !map) {
+      if (onSearchStatus) onSearchStatus(true);
+      return;
+    }
 
     const fetchHospitals = async () => {
       setLoading(true);
+      if (onSearchStatus) onSearchStatus(true);
       const center = map.getCenter();
       if (!center) {
         setLoading(false);
+        if (onSearchStatus) onSearchStatus(false);
         return;
       }
 
@@ -45,7 +52,7 @@ function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius
            maxResultCount: 20,
           };
           const response = await placesLib.Place.searchNearby(request);
-          places = response.places;
+          places = response.places || [];
         } else {
           // Fallback to searchByText
           const queryStr = urgency === 'Darurat' || urgency === 'Tinggi' 
@@ -58,7 +65,7 @@ function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius
             locationBias: center,
             maxResultCount: 15,
           });
-          places = response.places;
+          places = response.places || [];
         }
 
         const formatted = places.map(p => ({
@@ -79,6 +86,7 @@ function Hospitals({ urgency, onSelect, onHospitalsFound, refreshTrigger, radius
         if (onHospitalsFound) onHospitalsFound([]);
       } finally {
         setLoading(false);
+        if (onSearchStatus) onSearchStatus(false);
       }
     };
 
@@ -108,13 +116,15 @@ export default function FaskesMap({
   onHospitalsFound, 
   refreshTrigger,
   explicitUserLocation,
-  radius
+  radius,
+  onSearchStatus
 }: { 
   urgency: UrgencyLevel, 
   onHospitalsFound?: (h: FaskesLocation[]) => void, 
   refreshTrigger?: number,
   explicitUserLocation?: { lat: number, lng: number } | null,
-  radius?: number
+  radius?: number,
+  onSearchStatus?: (loading: boolean) => void
 }) {
   const [internalLocation, setInternalLocation] = useState<{ lat: number, lng: number } | null>(null);
   const [selectedFaskes, setSelectedFaskes] = useState<FaskesLocation | null>(null);
@@ -125,7 +135,10 @@ export default function FaskesMap({
     if (explicitUserLocation !== undefined) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setInternalLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => setInternalLocation({ lat: -6.2088, lng: 106.8456 }) // Default to Jakarta
+      (err) => {
+        console.warn("Geolocation failed, waiting for user location input or permission", err);
+        // Do not set a default here - let the component handle null location
+      }
     );
   }, [explicitUserLocation]);
 
@@ -137,7 +150,7 @@ export default function FaskesMap({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-slate-600 mb-4">
-            MediCepat memerlukan Google Maps API untuk memetakan fasilitas kesehatan.
+            MedisCek memerlukan Google Maps API untuk memetakan fasilitas kesehatan.
           </p>
           <div className="bg-slate-100 p-4 rounded-md text-xs space-y-2">
             <p>1. Dapatkan kunci API di Google Cloud Console.</p>
@@ -152,8 +165,8 @@ export default function FaskesMap({
     <div className="relative w-full h-[400px] rounded-xl overflow-hidden shadow-lg border border-slate-200">
       <APIProvider apiKey={MAPS_KEY}>
         <Map
-          defaultCenter={userLocation || { lat: -6.2088, lng: 106.8456 }}
-          defaultZoom={13}
+          defaultCenter={userLocation || { lat: -7.7956, lng: 110.3695 }} // Default to Yogyakarta (user context) if null, or handled by view
+          defaultZoom={userLocation ? 13 : 11}
           mapId="MEDICEPAT_MAP_ID"
           className="w-full h-full"
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
@@ -166,7 +179,14 @@ export default function FaskesMap({
               </div>
             </AdvancedMarker>
           )}
-          <Hospitals urgency={urgency} onSelect={setSelectedFaskes} onHospitalsFound={onHospitalsFound} refreshTrigger={refreshTrigger} radius={radius} />
+          <Hospitals 
+            urgency={urgency} 
+            onSelect={setSelectedFaskes} 
+            onHospitalsFound={onHospitalsFound} 
+            refreshTrigger={refreshTrigger} 
+            radius={radius} 
+            onSearchStatus={onSearchStatus}
+          />
         </Map>
       </APIProvider>
 

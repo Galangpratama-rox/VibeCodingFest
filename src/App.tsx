@@ -25,7 +25,9 @@ import {
   Home,
   Brain,
   History as HistoryIconLucide,
-  Map as MapIcon
+  Map as MapIcon,
+  LogOut,
+  User as UserIcon
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './components/ui/card';
@@ -39,8 +41,14 @@ import { useSpeechToText } from './hooks/useSpeechToText';
 import { analyzeSymptoms } from './services/geminiService';
 import { DiagnosisResult, MedicalHistory, UrgencyLevel, FaskesLocation } from './types';
 import FaskesMap from './components/Map';
+import { useAuth } from './hooks/useAuth';
+import { AuthModal } from './components/AuthModal';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 export default function App() {
+  const { user, signOut } = useAuth();
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [history, setHistory] = useState<MedicalHistory[]>([]);
   const [currentResult, setCurrentResult] = useState<DiagnosisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -52,14 +60,38 @@ export default function App() {
   const [realFaskes, setRealFaskes] = useState<FaskesLocation[]>([]);
   const [activeInput, setActiveInput] = useState('');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isExploreLoading, setIsExploreLoading] = useState(false);
 
   const { transcript, isListening, startListening, stopListening, setTranscript } = useSpeechToText();
 
-  // Load history from localStorage
+  // Load history - LocalStorage for guests, Firestore for logged in users
   useEffect(() => {
-    const saved = localStorage.getItem('medicepat_history');
-    if (saved) setHistory(JSON.parse(saved));
-  }, []);
+    if (!user) {
+      const saved = localStorage.getItem('medicepat_history');
+      if (saved) setHistory(JSON.parse(saved));
+    } else {
+      const q = query(
+        collection(db, "history_pemeriksaan"),
+        where("userId", "==", user.uid),
+        orderBy("timestamp", "desc")
+      );
+
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const firestoreHistory = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            timestamp: data.timestamp?.toMillis() || Date.now(),
+            input: data.isi_keluhan,
+            diagnosis: data.jawaban_ai
+          };
+        });
+        setHistory(firestoreHistory);
+      });
+
+      return () => unsubscribe();
+    }
+  }, [user]);
 
   // Handle explore view location
   useEffect(() => {
@@ -112,19 +144,36 @@ export default function App() {
     setIsAnalyzing(true);
     setView('result');
     try {
-      const result = await analyzeSymptoms(activeInput);
+      // Try to get location context for better AI accuracy
+      let locationContext = "";
+      try {
+        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+        });
+        locationContext = `Lat: ${pos.coords.latitude}, Lng: ${pos.coords.longitude}`;
+        // Store location for the result view map
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setExploreLocation(loc);
+        setExploreLocStatus('success');
+      } catch (e) {
+        console.warn("Could not get location for AI context");
+      }
+
+      const result = await analyzeSymptoms(activeInput, locationContext, user);
       setCurrentResult(result);
       
-      // Save to history
-      const newHistory: MedicalHistory = {
-        id: Date.now().toString(),
-        timestamp: Date.now(),
-        input: activeInput,
-        diagnosis: result
-      };
-      const updatedHistory = [newHistory, ...history].slice(0, 20);
-      setHistory(updatedHistory);
-      localStorage.setItem('medicepat_history', JSON.stringify(updatedHistory));
+      // Save to local history if guest
+      if (!user) {
+        const newHistory: MedicalHistory = {
+          id: Date.now().toString(),
+          timestamp: Date.now(),
+          input: activeInput,
+          diagnosis: result
+        };
+        const updatedHistory = [newHistory, ...history].slice(0, 20);
+        setHistory(updatedHistory);
+        localStorage.setItem('medicepat_history', JSON.stringify(updatedHistory));
+      }
 
       if (result.urgensi === 'Darurat' || result.urgensi === 'Tinggi') {
         toast.warning("Status DARURAT dideteksi. Segera hubungi bantuan medis!");
@@ -150,7 +199,7 @@ export default function App() {
 
   return (
     <div id="app-container" className={`min-h-screen flex flex-col ${isEmergency ? 'emergency-mode' : 'bg-[#F8FAFC]'}`}>
-      <Toaster position="top-center" />
+      <Toaster position="top-center" offset={80} />
       
       {/* Header */}
       <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-200 z-50 sticky top-0 shadow-sm w-full">
@@ -161,26 +210,26 @@ export default function App() {
                 <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.505 4.044 3 5.5L12 21l7-7z"/>
               </svg>
             </div>
-            <span className="text-2xl font-bold text-[#0F766E] tracking-tight hidden sm:block">MediCepat</span>
+            <span className="text-xl sm:text-2xl font-bold text-[#0F766E] tracking-tight">MedisCek</span>
           </div>
 
           {/* Desktop Nav */}
-          <nav className="hidden lg:flex items-center gap-6">
+          <nav className="hidden lg:flex items-center gap-10 ml-12">
             <button 
               onClick={() => setView('landing')}
-              className={`text-xs font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'landing' ? 'text-teal-600' : 'text-slate-400'}`}
+              className={`text-sm font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'landing' ? 'text-teal-600' : 'text-slate-400'}`}
             >
               Beranda
             </button>
             <button 
               onClick={() => setView('home')}
-              className={`text-xs font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'home' ? 'text-teal-600' : 'text-slate-400'}`}
+              className={`text-sm font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'home' ? 'text-teal-600' : 'text-slate-400'}`}
             >
               Analisis AI
             </button>
             <button 
               onClick={() => setView('explore')}
-              className={`text-xs font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'explore' ? 'text-teal-600' : 'text-slate-400'}`}
+              className={`text-sm font-black uppercase tracking-widest hover:text-teal-600 transition-colors ${view === 'explore' ? 'text-teal-600' : 'text-slate-400'}`}
             >
               Eksplorasi
             </button>
@@ -209,6 +258,40 @@ export default function App() {
                 <HistoryIconLucide className="w-5 h-5 text-slate-600" />
               </Button>
             )}
+            
+            {user ? (
+              <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 p-1.5 pr-4 rounded-full border border-slate-100">
+                <img 
+                  src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=0F766E&color=fff`} 
+                  alt="Profile" 
+                  className="w-7 h-7 rounded-full shadow-sm"
+                />
+                <button 
+                  onClick={() => signOut()}
+                  className="text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors hidden sm:block"
+                >
+                  Keluar
+                </button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={() => signOut()} 
+                  className="sm:hidden w-7 h-7"
+                >
+                  <LogOut className="w-4 h-4 text-slate-400" />
+                </Button>
+              </div>
+            ) : (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setIsAuthModalOpen(true)}
+                className="rounded-full border-slate-200 text-slate-600 font-bold px-4 h-9 text-xs"
+              >
+                Masuk
+              </Button>
+            )}
+
             <Button 
               variant="ghost" 
               size="icon" 
@@ -246,7 +329,7 @@ export default function App() {
                       <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.505 4.044 3 5.5L12 21l7-7z"/>
                     </svg>
                   </div>
-                  <span className="font-bold text-[#0F766E] tracking-tight">MediCepat</span>
+                  <span className="font-bold text-[#0F766E] tracking-tight">MedisCek</span>
                 </div>
                 <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(false)}>
                   <X className="w-6 h-6 text-slate-400" />
@@ -282,7 +365,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <main className={`flex-1 mx-auto w-full p-6 overflow-x-hidden pb-32 ${view === 'landing' || view === 'explore' || view === 'result' ? 'max-w-7xl' : 'max-w-2xl'}`}>
+      <main className={`flex-1 mx-auto w-full p-6 overflow-x-hidden pb-32 ${view === 'landing' || view === 'explore' || view === 'result' || view === 'home' ? 'max-w-7xl' : 'max-w-4xl'}`}>
         <AnimatePresence mode="wait">
           {view === 'landing' && (
             <motion.div 
@@ -385,7 +468,7 @@ export default function App() {
                 <div className="max-w-3xl mx-auto text-center space-y-6">
                   <h3 className="text-2xl md:text-3xl font-bold text-slate-800">Misi Kami: Menyelamatkan Nyawa Melalui Teknologi</h3>
                   <p className="text-slate-600 text-lg leading-relaxed">
-                    MediCepat hadir sebagai jembatan informasi antara pasien dan tenaga medis profesional di saat-saat paling krusial. Kami berkomitmen untuk menyediakan akses kesehatan yang merata dan responsif melalui inovasi AI.
+                    MedisCek hadir sebagai jembatan informasi antara pasien dan tenaga medis profesional di saat-saat paling krusial. Kami berkomitmen untuk menyediakan akses kesehatan yang merata dan responsif melalui inovasi AI.
                   </p>
                   <div className="flex justify-center gap-8 pt-4">
                     <div className="text-center">
@@ -408,14 +491,14 @@ export default function App() {
               <div className="max-w-3xl mx-auto mb-20 space-y-8">
                 <div className="text-center space-y-4">
                   <h3 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Pertanyaan Umum</h3>
-                  <p className="text-slate-500 text-lg">Temukan jawaban atas pertanyaan seputar penggunaan MediCepat.</p>
+                  <p className="text-slate-500 text-lg">Temukan jawaban atas pertanyaan seputar penggunaan MedisCek.</p>
                 </div>
                 
                 <Accordion type="single" collapsible className="w-full space-y-4">
                   <AccordionItem value="item-1" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apa itu MediCepat?</AccordionTrigger>
+                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apa itu MedisCek?</AccordionTrigger>
                     <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
-                      MediCepat adalah platform kesehatan berbasis AI yang membantu pengguna menganalisis gejala, mendeteksi kondisi darurat, dan menemukan fasilitas kesehatan terdekat secara real-time.
+                      MedisCek adalah platform kesehatan berbasis AI yang membantu pengguna menganalisis gejala, mendeteksi kondisi darurat, dan menemukan fasilitas kesehatan terdekat secara real-time.
                     </AccordionContent>
                   </AccordionItem>
 
@@ -429,7 +512,7 @@ export default function App() {
                   <AccordionItem value="item-3" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
                     <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Bagaimana sistem darurat bekerja?</AccordionTrigger>
                     <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
-                      Jika gejala terdeteksi berisiko tinggi, MediCepat akan memberikan peringatan darurat dan menyarankan tindakan medis segera, termasuk akses menuju rumah sakit atau layanan darurat.
+                      Jika gejala terdeteksi berisiko tinggi, MedisCek akan memberikan peringatan darurat dan menyarankan tindakan medis segera, termasuk akses menuju rumah sakit atau layanan darurat.
                     </AccordionContent>
                   </AccordionItem>
 
@@ -441,9 +524,9 @@ export default function App() {
                   </AccordionItem>
 
                   <AccordionItem value="item-5" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah MediCepat gratis digunakan?</AccordionTrigger>
+                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah MedisCek gratis digunakan?</AccordionTrigger>
                     <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
-                      Ya, seluruh fitur MediCepat saat ini dapat digunakan secara gratis, termasuk analisis gejala berbasis AI, deteksi kondisi darurat, dan pencarian fasilitas kesehatan terdekat. Kami berkomitmen menyediakan akses kesehatan digital yang mudah dijangkau untuk semua pengguna.
+                      Ya, seluruh fitur MedisCek saat ini dapat digunakan secara gratis, termasuk analisis gejala berbasis AI, deteksi kondisi darurat, dan pencarian fasilitas kesehatan terdekat. Kami berkomitmen menyediakan akses kesehatan digital yang mudah dijangkau untuk semua pengguna.
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
@@ -459,7 +542,7 @@ export default function App() {
                           <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.505 4.044 3 5.5L12 21l7-7z"/>
                         </svg>
                       </div>
-                      <span className="text-xl font-bold text-[#0F766E] tracking-tight">MediCepat</span>
+                      <span className="text-xl font-bold text-[#0F766E] tracking-tight">MedisCek</span>
                     </div>
                     <p className="text-sm text-slate-500 leading-relaxed max-w-xs">Platform kesehatan darurat berbasis AI yang menghubungkan Anda dengan layanan medis tercepat di saat kritis.</p>
                   </div>
@@ -484,18 +567,10 @@ export default function App() {
                   </div>
                 </div>
                 <div className="border-t border-slate-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center">
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-[2px]">© 2026 MediCepat Tech</p>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-[2px]">© 2026 MedisCek Tech</p>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Smart Healthcare Ecosystem</p>
                 </div>
               </footer>
-
-              <div className="bg-slate-900 rounded-2xl p-6 text-white text-center">
-                <p className="text-xs font-bold text-teal-400 uppercase tracking-widest mb-2">Terintegrasi Dengan</p>
-                <div className="flex justify-center gap-6 opacity-60 grayscale brightness-200">
-                  <span className="font-black text-lg">GEMINI AI</span>
-                  <span className="font-black text-lg">LOCALS</span>
-                </div>
-              </div>
             </motion.div>
           )}
 
@@ -527,6 +602,7 @@ export default function App() {
                    refreshTrigger={exploreTrigger} 
                    explicitUserLocation={exploreLocation}
                    radius={exploreFilter.distance * 1000}
+                   onSearchStatus={setIsExploreLoading}
                  />
               </div>
 
@@ -609,10 +685,18 @@ export default function App() {
                     <p className="text-sm text-slate-500 max-w-md mx-auto">Kami memerlukan akses lokasi untuk menemukan fasilitas kesehatan terdekat darurat di sekitar Anda.</p>
                     <Button onClick={requestLocation} className="mt-4 bg-teal-600 hover:bg-teal-700 font-bold px-8">Refresh Izin Lokasi</Button>
                   </div>
-                ) : realFaskes.length === 0 ? (
+                ) : isExploreLoading ? (
                   <div className="col-span-full py-32 text-center space-y-4">
                     <Loader2 className="w-12 h-12 animate-spin mx-auto text-teal-600" />
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mensinkronkan Data Faskes...</p>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mencari Faskes Terdekat...</p>
+                  </div>
+                ) : realFaskes.length === 0 ? (
+                  <div className="col-span-full py-32 text-center space-y-4">
+                    <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <Search className="w-8 h-8 text-slate-300" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800">Tidak Ada Faskes Ditemukan</h3>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Tidak ada fasilitas kesehatan yang ditemukan dalam radius {exploreFilter.distance} km. Coba perlebar radius pencarian Anda.</p>
                   </div>
                 ) : (
                   realFaskes
@@ -684,23 +768,23 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="space-y-12 pt-4"
+              className="space-y-12 pt-8"
             >
-              <div className="flex flex-col lg:flex-row gap-12 items-start">
-                <div className="flex-1 space-y-8 w-full">
-                  <div className="space-y-4">
-                    <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">Analisis <span className="text-teal-600 italic">Cerdas</span> Keluhan Anda.</h2>
-                    <p className="text-slate-500 text-lg">AI kami akan mengevaluasi tingkat urgensi dan memberikan panduan serta lokasi bantuan tercepat.</p>
+              <div className="flex flex-col lg:flex-row gap-16 items-start">
+                <div className="flex-1 space-y-10 w-full">
+                  <div className="space-y-6">
+                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">Analisis <span className="text-teal-600 italic">Cerdas</span> <br className="hidden xl:block" /> Keluhan Anda.</h2>
+                    <p className="text-slate-500 text-lg md:text-xl max-w-2xl">Teknologi AI Gemini kami mendeteksi tingkat urgensi kondisi Anda secara real-time dan memberikan panduan darurat yang akurat.</p>
                   </div>
 
-                  <div className="glass-card rounded-[32px] shadow-2xl border-4 border-white overflow-hidden bg-white">
+                  <div className="glass-card rounded-[32px] shadow-2xl border-4 border-white overflow-hidden bg-white hover:border-teal-500/10 transition-all">
                     <textarea 
-                      className="w-full h-56 p-8 bg-transparent border-none focus:ring-0 text-2xl font-medium resize-none placeholder:text-slate-300 placeholder:font-normal leading-relaxed outline-none"
+                      className="w-full h-64 p-10 bg-transparent border-none focus:ring-0 text-2xl md:text-3xl font-medium resize-none placeholder:text-slate-200 placeholder:font-normal leading-relaxed outline-none"
                       placeholder="Apa yang Anda rasakan saat ini? Jelaskan sejelas mungkin..."
                       value={activeInput}
                       onChange={(e) => setActiveInput(e.target.value)}
                     />
-                    <div className="px-8 py-6 bg-slate-50/80 flex justify-between items-center border-t border-slate-100">
+                    <div className="px-10 py-8 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
                       <div className="flex gap-4">
                         <Button 
                           variant="ghost" 
@@ -759,7 +843,7 @@ export default function App() {
                         <Phone className="w-6 h-6" />
                       </div>
                       <h3 className="font-bold text-slate-800 text-lg">Panggilan Darurat</h3>
-                      <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest leading-loose">Direct Call ke Layanan 119 Jakarta</p>
+                      <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest leading-loose">Direct Call ke Layanan 119 Terdekat</p>
                     </div>
                   </div>
 
@@ -778,7 +862,7 @@ export default function App() {
                 <div className="flex flex-col md:flex-row items-end justify-between border-b pb-8 border-slate-200 gap-4">
                   <div>
                     <Badge variant="outline" className="mb-4 text-[10px] font-black tracking-widest px-4 py-1.5 opacity-50 border-slate-300">PROTOKOL ANALISIS</Badge>
-                    <h3 className="text-3xl font-bold text-slate-800">Bagaimana MediCepat Bekerja?</h3>
+                    <h3 className="text-3xl font-bold text-slate-800">Bagaimana MedisCek Bekerja?</h3>
                   </div>
                   <p className="text-slate-500 text-sm md:max-w-md font-medium">Sistem kami menggunakan model AI Gemini untuk melakukan triase awal berdasarkan protokol medis standar internasional.</p>
                 </div>
@@ -804,7 +888,7 @@ export default function App() {
                     <div className="w-16 h-16 bg-teal-600 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-teal-600/30">03</div>
                     <div className="bg-white p-2 rounded-2xl">
                       <h5 className="text-xl font-bold text-slate-800 mb-3">Navigasi Langsung</h5>
-                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, Anda akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat.</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, Anda akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat di sekitar Anda.</p>
                     </div>
                   </div>
                 </div>
@@ -930,7 +1014,12 @@ export default function App() {
                         <Badge variant="outline" className="text-[8px] uppercase font-black tracking-widest bg-emerald-50 text-emerald-600 border-emerald-100">GPS ONLINE</Badge>
                       </div>
                       <div className="rounded-3xl overflow-hidden border-4 border-white shadow-2xl h-[400px] lg:h-[500px]">
-                        <FaskesMap urgency={currentResult.urgensi} onHospitalsFound={setRealFaskes} />
+                        <FaskesMap 
+                          urgency={currentResult.urgensi} 
+                          onHospitalsFound={setRealFaskes} 
+                          explicitUserLocation={exploreLocation} 
+                          radius={2000}
+                        />
                       </div>
                     </section>
 
@@ -1050,6 +1139,7 @@ export default function App() {
           </div>
         </footer>
       )}
+      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
     </div>
   );
 }

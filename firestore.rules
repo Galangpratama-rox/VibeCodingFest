@@ -1,0 +1,67 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Phase 4: Entity Validations
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
+             data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             data.email.size() <= 256 &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidExaminationHistory(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'isi_keluhan', 'jawaban_ai', 'timestamp']) &&
+             data.userId == request.auth.uid &&
+             data.userEmail == request.auth.token.email &&
+             data.isi_keluhan is string && data.isi_keluhan.size() <= 5000 &&
+             data.jawaban_ai is map &&
+             data.timestamp == request.time;
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt'])
+      );
+    }
+
+    // 2. History Collection
+    match /history_pemeriksaan/{historyId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(historyId) && isValidExaminationHistory(incoming());
+      // Updates and deletes are NOT allowed for history to maintain integrity
+      allow update, delete: if false;
+    }
+  }
+}

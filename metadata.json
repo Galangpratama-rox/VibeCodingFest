@@ -1,5 +1,5 @@
 {
-  "name": "MediCepat",
+  "name": "MedisCek",
   "description": "Platform kesehatan darurat dengan input suara AI dan pemetaan faskes terdekat.",
   "requestFramePermissions": [
     "microphone",
