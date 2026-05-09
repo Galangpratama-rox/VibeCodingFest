@@ -5,7 +5,7 @@ import {
   signInWithPopup, 
   signOut as firebaseSignOut
 } from 'firebase/auth';
-import { auth, googleProvider, db } from '../lib/firebase';
+import { auth, googleProvider, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 interface AuthContextType {
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             updatedAt: serverTimestamp()
           }, { merge: true });
         } catch (error) {
-          console.error("Error syncing user to Firestore", error);
+          handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
         }
       }
     });

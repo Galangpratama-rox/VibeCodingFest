@@ -44,7 +44,7 @@ import FaskesMap from './components/Map';
 import { useAuth } from './hooks/useAuth';
 import { AuthModal } from './components/AuthModal';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from './lib/firebase';
+import { db, handleFirestoreError, OperationType } from './lib/firebase';
 
 export default function App() {
   const { user, signOut } = useAuth();
@@ -87,6 +87,8 @@ export default function App() {
           };
         });
         setHistory(firestoreHistory);
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, "history_pemeriksaan");
       });
 
       return () => unsubscribe();

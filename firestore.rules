@@ -32,7 +32,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.keys().hasAll(['uid', 'email', 'updatedAt']) &&
              data.uid == request.auth.uid &&
-             data.email == request.auth.token.email &&
+             data.email is string &&
              data.email.size() <= 256 &&
              data.updatedAt == request.time;
     }
@@ -40,7 +40,8 @@ service cloud.firestore {
     function isValidExaminationHistory(data) {
       return data.keys().hasAll(['userId', 'userEmail', 'isi_keluhan', 'jawaban_ai', 'timestamp']) &&
              data.userId == request.auth.uid &&
-             data.userEmail == request.auth.token.email &&
+             data.userEmail is string &&
+             data.userEmail.size() <= 256 &&
              data.isi_keluhan is string && data.isi_keluhan.size() <= 5000 &&
              data.jawaban_ai is map &&
              data.timestamp == request.time;
@@ -51,7 +52,9 @@ service cloud.firestore {
       allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt'])
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt', 'uid', 'email']) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email
       );
     }
 
