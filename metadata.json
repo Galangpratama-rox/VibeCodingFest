@@ -1,0 +1,9 @@
+{
+  "name": "MediCepat",
+  "description": "Platform kesehatan darurat dengan input suara AI dan pemetaan faskes terdekat.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ],
+  "majorCapabilities": []
+}
