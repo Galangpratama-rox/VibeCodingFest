@@ -64,35 +64,35 @@ export default function App() {
 
   const { transcript, isListening, startListening, stopListening, setTranscript } = useSpeechToText();
 
-  // Load history - LocalStorage for guests, Firestore for logged in users
+  // Load history - Firestore for logged in users ONLY
   useEffect(() => {
     if (!user) {
-      const saved = localStorage.getItem('medicepat_history');
-      if (saved) setHistory(JSON.parse(saved));
-    } else {
-      const q = query(
-        collection(db, "history_pemeriksaan"),
-        where("userId", "==", user.uid),
-        orderBy("timestamp", "desc")
-      );
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const firestoreHistory = snapshot.docs.map(doc => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            timestamp: data.timestamp?.toMillis() || Date.now(),
-            input: data.isi_keluhan,
-            diagnosis: data.jawaban_ai
-          };
-        });
-        setHistory(firestoreHistory);
-      }, (error) => {
-        handleFirestoreError(error, OperationType.LIST, "history_pemeriksaan");
-      });
-
-      return () => unsubscribe();
+      setHistory([]);
+      return;
     }
+    
+    const q = query(
+      collection(db, "history_pemeriksaan"),
+      where("userId", "==", user.uid),
+      orderBy("timestamp", "desc")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const firestoreHistory = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          timestamp: data.timestamp?.toMillis() || Date.now(),
+          input: data.isi_keluhan,
+          diagnosis: data.jawaban_ai
+        };
+      });
+      setHistory(firestoreHistory);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "history_pemeriksaan");
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   // Handle explore view location
@@ -164,19 +164,6 @@ export default function App() {
       const result = await analyzeSymptoms(activeInput, locationContext, user);
       setCurrentResult(result);
       
-      // Save to local history if guest
-      if (!user) {
-        const newHistory: MedicalHistory = {
-          id: Date.now().toString(),
-          timestamp: Date.now(),
-          input: activeInput,
-          diagnosis: result
-        };
-        const updatedHistory = [newHistory, ...history].slice(0, 20);
-        setHistory(updatedHistory);
-        localStorage.setItem('medicepat_history', JSON.stringify(updatedHistory));
-      }
-
       if (result.urgensi === 'Darurat' || result.urgensi === 'Tinggi') {
         toast.warning("Status DARURAT dideteksi. Segera hubungi bantuan medis!");
       }
@@ -256,8 +243,20 @@ export default function App() {
           
           <div className="flex items-center gap-2">
             {view !== 'landing' && (
-              <Button variant="ghost" size="icon" onClick={() => setView('history')} className="rounded-full hidden sm:flex">
-                <HistoryIconLucide className="w-5 h-5 text-slate-600" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => {
+                  if (user) {
+                    setView('history');
+                  } else {
+                    setIsAuthModalOpen(true);
+                    toast.info("Silakan login untuk melihat riwayat pemeriksaan kita.");
+                  }
+                }} 
+                className={`rounded-full hidden sm:flex ${view === 'history' ? 'bg-teal-50 text-teal-600' : ''}`}
+              >
+                <HistoryIconLucide className={`w-5 h-5 ${view === 'history' ? 'text-teal-600' : 'text-slate-600'}`} />
               </Button>
             )}
             
@@ -348,6 +347,12 @@ export default function App() {
                   <button 
                     key={item.id}
                     onClick={() => {
+                      if (item.id === 'history' && !user) {
+                        setIsMobileMenuOpen(false);
+                        setIsAuthModalOpen(true);
+                        toast.info("Silakan login untuk melihat riwayat pemeriksaan kita.");
+                        return;
+                      }
                       setView(item.id as any);
                       setIsMobileMenuOpen(false);
                     }}
@@ -385,10 +390,10 @@ export default function App() {
                     </Badge>
                   </div>
                   <h2 className="text-4xl md:text-6xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
-                    Kesehatan Anda, <span className="text-teal-600">Prioritas Tercepat</span> Kami.
+                    Kesehatan Kita, <span className="text-teal-600">Prioritas Tercepat</span> Kita.
                   </h2>
                   <p className="text-slate-500 text-lg md:text-xl leading-relaxed">
-                    Asisten medis berbasis AI yang siap mendengarkan keluhan Anda dan memberikan panduan darurat serta navigasi faskes terdekat dalam hitungan detik.
+                    Asisten medis berbasis AI yang siap mendengarkan keluhan kita dan memberikan panduan darurat serta navigasi faskes terdekat dalam hitungan detik.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4">
                     <Button 
@@ -441,7 +446,7 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-lg">AI Voice Analysis</h4>
-                    <p className="text-sm text-slate-500 leading-relaxed">Teknologi pengenalan suara canggih untuk memproses keluhan medis Anda dengan akurasi tinggi.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">Teknologi pengenalan suara canggih untuk memproses keluhan medis kita dengan akurasi tinggi.</p>
                   </div>
                 </div>
 
@@ -461,7 +466,7 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-lg">Faskes Finder</h4>
-                    <p className="text-sm text-slate-500 leading-relaxed">Navigasi cerdas ke unit gawat darurat dan klinik terdekat berdasarkan lokasi real-time Anda.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">Navigasi cerdas ke unit gawat darurat dan klinik terdekat berdasarkan lokasi real-time kita.</p>
                   </div>
                 </div>
               </div>
@@ -507,7 +512,7 @@ export default function App() {
                   <AccordionItem value="item-2" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
                     <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah hasil analisis AI akurat?</AccordionTrigger>
                     <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
-                      Sistem AI kami dirancang untuk memberikan analisis awal berdasarkan gejala yang Anda berikan. Hasil ini bukan pengganti diagnosis dokter, namun dapat membantu menentukan langkah awal yang tepat.
+                      Sistem AI kita dirancang untuk memberikan analisis awal berdasarkan gejala yang kita berikan. Hasil ini bukan pengganti diagnosis dokter, namun dapat membantu menentukan langkah awal yang tepat.
                     </AccordionContent>
                   </AccordionItem>
 
@@ -535,9 +540,9 @@ export default function App() {
               </div>
 
               {/* Comprehensive Landing Footer */}
-              <footer className="border-t border-slate-200 pt-16 pb-8">
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-12 mb-12">
-                  <div className="space-y-4">
+              <footer className="border-t border-slate-200 pt-12 pb-8 px-4 sm:px-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-10 md:gap-12 mb-12 text-center sm:text-left">
+                  <div className="space-y-4 flex flex-col items-center sm:items-start">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-[#0F766E] rounded-lg flex items-center justify-center">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -546,9 +551,9 @@ export default function App() {
                       </div>
                       <span className="text-xl font-bold text-[#0F766E] tracking-tight">MedisCek</span>
                     </div>
-                    <p className="text-sm text-slate-500 leading-relaxed max-w-xs">Platform kesehatan darurat berbasis AI yang menghubungkan Anda dengan layanan medis tercepat di saat kritis.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed max-w-xs mx-auto sm:mx-0">Platform kesehatan darurat berbasis AI yang menghubungkan kita dengan layanan medis tercepat di saat kritis.</p>
                   </div>
-                  <div>
+                  <div className="flex flex-col items-center sm:items-start">
                     <h5 className="font-black text-slate-900 mb-4 uppercase text-[10px] tracking-widest">Link Cepat</h5>
                     <ul className="space-y-3 text-sm text-slate-500 font-bold">
                       <li onClick={() => setView('home')} className="hover:text-teal-600 cursor-pointer transition-colors px-0 py-0">Mulai Analisis</li>
@@ -556,14 +561,14 @@ export default function App() {
                       <li onClick={() => setView('history')} className="hover:text-teal-600 cursor-pointer transition-colors px-0 py-0">Riwayat Medis</li>
                     </ul>
                   </div>
-                  <div>
+                  <div className="flex flex-col items-center sm:items-start">
                     <h5 className="font-black text-slate-900 mb-4 uppercase text-[10px] tracking-widest">Kontak</h5>
                     <ul className="space-y-3 text-sm text-slate-500">
                       <li className="flex items-center gap-2 px-0 py-0"><Phone className="w-4 h-4 text-teal-600" /> +62 21 555 0123</li>
                       <li className="flex items-center gap-2 px-0 py-0"><ShieldAlert className="w-4 h-4 text-red-600" /> Tanggap Darurat: 119</li>
                     </ul>
                   </div>
-                  <div>
+                  <div className="flex flex-col items-center sm:items-start">
                     <h5 className="font-black text-slate-900 mb-4 uppercase text-[10px] tracking-widest">Negara</h5>
                     <p className="text-sm text-slate-500 font-bold px-0 py-0">Indonesia 🇮🇩</p>
                   </div>
@@ -676,7 +681,7 @@ export default function App() {
                 {exploreLocStatus === 'detecting' ? (
                   <div className="col-span-full py-32 text-center space-y-4">
                     <Loader2 className="w-12 h-12 animate-spin mx-auto text-teal-600" />
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mendeteksi Lokasi Anda...</p>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mendeteksi Lokasi Kita...</p>
                   </div>
                 ) : exploreLocStatus === 'denied' ? (
                   <div className="col-span-full py-32 text-center space-y-4">
@@ -684,7 +689,7 @@ export default function App() {
                       <AlertTriangle className="w-8 h-8 text-red-500" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Izin Lokasi Ditolak</h3>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">Kami memerlukan akses lokasi untuk menemukan fasilitas kesehatan terdekat darurat di sekitar Anda.</p>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Kita memerlukan akses lokasi untuk menemukan fasilitas kesehatan terdekat darurat di sekitar kita.</p>
                     <Button onClick={requestLocation} className="mt-4 bg-teal-600 hover:bg-teal-700 font-bold px-8">Refresh Izin Lokasi</Button>
                   </div>
                 ) : isExploreLoading ? (
@@ -698,7 +703,7 @@ export default function App() {
                       <Search className="w-8 h-8 text-slate-300" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Tidak Ada Faskes Ditemukan</h3>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">Tidak ada fasilitas kesehatan yang ditemukan dalam radius {exploreFilter.distance} km. Coba perlebar radius pencarian Anda.</p>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Tidak ada fasilitas kesehatan yang ditemukan dalam radius {exploreFilter.distance} km. Coba perlebar radius pencarian kita.</p>
                   </div>
                 ) : (
                   realFaskes
@@ -775,14 +780,14 @@ export default function App() {
               <div className="flex flex-col lg:flex-row gap-16 items-start">
                 <div className="flex-1 space-y-10 w-full">
                   <div className="space-y-6">
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">Analisis <span className="text-teal-600 italic">Cerdas</span> <br className="hidden xl:block" /> Keluhan Anda.</h2>
-                    <p className="text-slate-500 text-lg md:text-xl max-w-2xl">Teknologi AI Gemini kami mendeteksi tingkat urgensi kondisi Anda secara real-time dan memberikan panduan darurat yang akurat.</p>
+                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">Analisis <span className="text-teal-600 italic">Cerdas</span> <br className="hidden xl:block" /> Keluhan Kita.</h2>
+                    <p className="text-slate-500 text-lg md:text-xl max-w-2xl">Teknologi AI Gemini kita mendeteksi tingkat urgensi kondisi kita secara real-time dan memberikan panduan darurat yang akurat.</p>
                   </div>
 
                   <div className="glass-card rounded-[32px] shadow-2xl border-4 border-white overflow-hidden bg-white hover:border-teal-500/10 transition-all">
                     <textarea 
                       className="w-full h-64 p-10 bg-transparent border-none focus:ring-0 text-2xl md:text-3xl font-medium resize-none placeholder:text-slate-200 placeholder:font-normal leading-relaxed outline-none"
-                      placeholder="Apa yang Anda rasakan saat ini? Jelaskan sejelas mungkin..."
+                      placeholder="Apa yang kita rasakan saat ini? Jelaskan sejelas mungkin..."
                       value={activeInput}
                       onChange={(e) => setActiveInput(e.target.value)}
                     />
@@ -823,7 +828,7 @@ export default function App() {
                           />
                         ))}
                       </div>
-                      <p className="text-xs font-black text-teal-600 uppercase tracking-[3px] animate-pulse">Menyimak Aktif Gejala Anda...</p>
+                      <p className="text-xs font-black text-teal-600 uppercase tracking-[3px] animate-pulse">Menyimak Aktif Gejala Kita...</p>
                     </motion.div>
                   )}
                 </div>
@@ -854,7 +859,7 @@ export default function App() {
                        <ShieldAlert className="w-20 h-20" />
                     </div>
                     <h4 className="text-[10px] font-black text-teal-400 uppercase tracking-[3px] mb-4">Privasi & Keamanan</h4>
-                    <p className="text-xs text-slate-400 leading-relaxed font-medium">Data keluhan Anda dienkripsi dan diproses secara anonim untuk keamanan privasi medis Anda.</p>
+                    <p className="text-xs text-slate-400 leading-relaxed font-medium">Data keluhan kita dienkripsi dan diproses secara anonim untuk keamanan privasi medis kita.</p>
                   </div>
                 </div>
               </div>
@@ -883,14 +888,14 @@ export default function App() {
                     <div className="absolute top-8 left-16 right-0 h-0.5 bg-slate-100 hidden md:block" />
                     <div className="bg-white p-2 rounded-2xl">
                       <h5 className="text-xl font-bold text-slate-800 mb-3">Triase Urgensi</h5>
-                      <p className="text-sm text-slate-500 leading-relaxed">Sistem menentukan apakah kondisi Anda masuk kategori Hijau, Kuning, atau Merah (Gawat Darurat).</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">Sistem menentukan apakah kondisi kita masuk kategori Hijau, Kuning, atau Merah (Gawat Darurat).</p>
                     </div>
                   </div>
                   <div className="space-y-6">
                     <div className="w-16 h-16 bg-teal-600 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-teal-600/30">03</div>
                     <div className="bg-white p-2 rounded-2xl">
                       <h5 className="text-xl font-bold text-slate-800 mb-3">Navigasi Langsung</h5>
-                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, Anda akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat di sekitar Anda.</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, kita akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat di sekitar kita.</p>
                     </div>
                   </div>
                 </div>
@@ -1064,46 +1069,66 @@ export default function App() {
               animate={{ opacity: 1, x: 0 }}
               className="space-y-6"
             >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Riwayat Keluhan</h3>
-                <Button variant="ghost" size="sm" onClick={() => setView('home')} className="font-black text-[10px] uppercase">Tutup</Button>
-              </div>
-
-              {history.length === 0 ? (
-                <div className="text-center py-24 opacity-30 space-y-4">
-                  <HistoryIcon className="w-16 h-16 mx-auto stroke-[1]" />
-                  <p className="text-sm font-bold uppercase tracking-widest">Belum ada riwayat</p>
+              {!user ? (
+                <div className="flex flex-col items-center justify-center py-32 gap-6 max-w-md mx-auto text-center">
+                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                    <ShieldAlert className="w-10 h-10" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Akses Terbatas Kita</h3>
+                    <p className="text-slate-500 text-sm">Silakan masuk dengan akun kita untuk melihat riwayat pemeriksaan medis secara aman.</p>
+                  </div>
+                  <Button 
+                    onClick={() => setIsAuthModalOpen(true)}
+                    className="bg-teal-600 hover:bg-teal-700 font-bold px-8 rounded-xl h-12"
+                  >
+                    Masuk Sekarang
+                  </Button>
                 </div>
               ) : (
-                <ScrollArea className="h-[calc(100vh-180px)] pr-4">
-                  <div className="space-y-4 pb-12">
-                    {history.map((item) => (
-                      <div 
-                        key={item.id} 
-                        className="glass-card p-5 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-all border border-slate-100 group shadow-sm"
-                        onClick={() => {
-                          setCurrentResult(item.diagnosis);
-                          setActiveInput(item.input);
-                          setView('result');
-                        }}
-                      >
-                        <div className="flex justify-between items-start mb-3">
-                          <span className="text-[10px] font-black text-slate-400 flex items-center uppercase tracking-tighter">
-                            <Clock className="w-3 h-3 mr-1" />
-                            {new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <Badge className={`${getUrgencyColor(item.diagnosis.urgensi)} text-[8px] font-black uppercase px-2 py-0`}>
-                            {item.diagnosis.urgensi}
-                          </Badge>
-                        </div>
-                        <p className="text-sm font-bold text-slate-700 line-clamp-2 leading-relaxed group-hover:text-teal-700 transition-colors">"{item.input}"</p>
-                        <div className="mt-4 flex items-center text-[10px] font-black text-teal-600 uppercase tracking-widest">
-                          Lihat Analisis <ChevronRight className="w-3 h-3 ml-1" />
-                        </div>
-                      </div>
-                    ))}
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Riwayat Keluhan</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setView('home')} className="font-black text-[10px] uppercase">Tutup</Button>
                   </div>
-                </ScrollArea>
+
+                  {history.length === 0 ? (
+                    <div className="text-center py-24 opacity-30 space-y-4">
+                      <HistoryIcon className="w-16 h-16 mx-auto stroke-[1]" />
+                      <p className="text-sm font-bold uppercase tracking-widest">Belum ada riwayat</p>
+                    </div>
+                  ) : (
+                    <ScrollArea className="h-[calc(100vh-180px)] pr-4">
+                      <div className="space-y-4 pb-12">
+                        {history.map((item) => (
+                          <div 
+                            key={item.id} 
+                            className="glass-card p-5 rounded-2xl cursor-pointer hover:border-teal-500/30 transition-all border border-slate-100 group shadow-sm"
+                            onClick={() => {
+                              setCurrentResult(item.diagnosis);
+                              setActiveInput(item.input);
+                              setView('result');
+                            }}
+                          >
+                            <div className="flex justify-between items-start mb-3">
+                              <span className="text-[10px] font-black text-slate-400 flex items-center uppercase tracking-tighter">
+                                <Clock className="w-3 h-3 mr-1" />
+                                {new Date(item.timestamp).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} • {new Date(item.timestamp).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <Badge className={`${getUrgencyColor(item.diagnosis.urgensi)} text-[8px] font-black uppercase px-2 py-0`}>
+                                {item.diagnosis.urgensi}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-bold text-slate-700 line-clamp-2 leading-relaxed group-hover:text-teal-700 transition-colors">"{item.input}"</p>
+                            <div className="mt-4 flex items-center text-[10px] font-black text-teal-600 uppercase tracking-widest">
+                              Lihat Analisis <ChevronRight className="w-3 h-3 ml-1" />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </>
               )}
             </motion.div>
           )}
@@ -1127,7 +1152,14 @@ export default function App() {
             <Button 
               variant="outline" 
               className="rounded-xl border-2 border-teal-600 text-teal-600 font-black text-[10px] uppercase tracking-wider h-10 px-4 hidden sm:flex"
-              onClick={() => setView('history')}
+              onClick={() => {
+                if (user) {
+                  setView('history');
+                } else {
+                  setIsAuthModalOpen(true);
+                  toast.info("Silakan login untuk melihat riwayat.");
+                }
+              }}
             >
               RIWAYAT
             </Button>

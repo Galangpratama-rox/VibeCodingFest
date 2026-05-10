@@ -26,18 +26,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
       setLoading(false);
 
-      if (user) {
-        // Sync user to Firestore
+      if (user && user.emailVerified) {
+        // Sync user to Firestore only if verified
         try {
           await setDoc(doc(db, "users", user.uid), {
             uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
+            email: user.email || "",
+            displayName: user.displayName || user.email?.split('@')[0] || "User",
+            photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${user.email || 'User'}&background=0F766E&color=fff`,
             updatedAt: serverTimestamp()
           }, { merge: true });
         } catch (error) {
-          handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+          console.warn("Could not sync user profile to Firestore:", error);
         }
       }
     });

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword 
+  signInWithEmailAndPassword,
+  sendEmailVerification
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -28,30 +29,55 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signOut } = useAuth();
+
+  const validateEmail = (email: string) => {
+    const re = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+    return re.test(email.toLowerCase());
+  };
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Gmail domain validation for registration
-    if (!isLogin && !email.toLowerCase().endsWith('@gmail.com')) {
-      toast.error('Hanya akun Gmail yang diperbolehkan');
+    // Improved email validation
+    if (!validateEmail(email)) {
+      toast.error('Silakan gunakan format email @gmail.com yang valid untuk keamanan kita bersama.');
       return;
     }
 
     setIsLoading(true);
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-        toast.success('Berhasil masuk');
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        if (!user.emailVerified) {
+          await signOut();
+          toast.warning('Email kita belum diverifikasi. Silakan cek kotak masuk email kita dan klik tautan verifikasi.');
+          setIsLoading(false);
+          return;
+        }
+
+        toast.success('Berhasil masuk ke akun kita!');
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-        toast.success('Pendaftaran berhasil');
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await sendEmailVerification(userCredential.user);
+        toast.success('Pendaftaran berhasil! Silakan cek email kita untuk melakukan verifikasi akun.');
       }
       onClose();
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || 'Terjadi kesalahan');
+      if (error.code === 'auth/operation-not-allowed') {
+        toast.error('Metode Email/Password belum diaktifkan di Firebase Console kita.');
+      } else if (error.code === 'auth/email-already-in-use') {
+        toast.error('Email ini sudah terdaftar. Silakan masuk atau gunakan email lain untuk akun kita.');
+      } else if (error.code === 'auth/weak-password') {
+        toast.error('Kata sandi terlalu lemah. Minimal 6 karakter demi keamanan kita.');
+      } else if (error.code === 'auth/invalid-login-credentials' || error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+        toast.error('Email atau kata sandi salah. Silakan periksa kembali data anda.');
+      } else {
+        toast.error(error.message || 'Terjadi kesalahan pada sistem kita');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +90,12 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       toast.success('Berhasil masuk dengan Google');
       onClose();
     } catch (error: any) {
-      toast.error('Gagal masuk dengan Google');
+      console.error("Google Sign-in Error:", error);
+      if (error.code === 'auth/popup-blocked') {
+        toast.error('Popup diblokir oleh browser. Silakan izinkan popup untuk situs ini.');
+      } else {
+        toast.error('Gagal masuk dengan Google. Silakan coba lagi.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -79,8 +110,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           </DialogTitle>
           <DialogDescription className="text-slate-500">
             {isLogin 
-              ? 'Masuk untuk mengakses riwayat pemeriksaan Anda' 
-              : 'Daftar dengan akun Gmail Anda untuk memulai'}
+              ? 'Masuk untuk mengakses riwayat pemeriksaan kita' 
+              : 'Daftar dengan akun Gmail kita untuk memulai'}
           </DialogDescription>
         </DialogHeader>
 
