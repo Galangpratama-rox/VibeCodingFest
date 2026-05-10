@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { 
   createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword,
-  sendEmailVerification
+  signInWithEmailAndPassword
 } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
@@ -48,21 +47,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setIsLoading(true);
     try {
       if (isLogin) {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const user = userCredential.user;
-
-        if (!user.emailVerified) {
-          await signOut();
-          toast.warning('Email kita belum diverifikasi. Silakan cek kotak masuk email kita dan klik tautan verifikasi.');
-          setIsLoading(false);
-          return;
-        }
-
+        await signInWithEmailAndPassword(auth, email, password);
         toast.success('Berhasil masuk ke akun kita!');
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await sendEmailVerification(userCredential.user);
-        toast.success('Pendaftaran berhasil! Silakan cek email kita untuk melakukan verifikasi akun.');
+        await createUserWithEmailAndPassword(auth, email, password);
+        toast.success('Pendaftaran berhasil! Selamat datang di MedisCek.');
       }
       onClose();
     } catch (error: any) {

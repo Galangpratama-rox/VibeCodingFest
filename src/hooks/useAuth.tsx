@@ -26,8 +26,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(user);
       setLoading(false);
 
-      if (user && user.emailVerified) {
-        // Sync user to Firestore only if verified
+      if (user) {
+        // Sync user to Firestore
         try {
           await setDoc(doc(db, "users", user.uid), {
             uid: user.uid,

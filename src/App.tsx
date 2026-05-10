@@ -397,14 +397,14 @@ export default function App() {
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4">
                     <Button 
-                      className="flex-1 h-16 bg-[#0F766E] hover:bg-[#115E59] text-lg font-bold rounded-2xl shadow-xl shadow-teal-500/20 active:scale-[0.98] transition-all"
+                      className="w-full sm:flex-1 h-16 sm:h-20 bg-[#0F766E] hover:bg-[#115E59] text-lg sm:text-xl font-bold rounded-2xl shadow-xl shadow-teal-500/20 active:scale-[0.98] transition-all"
                       onClick={() => setView('home')}
                     >
                       Mulai Analisis <ArrowRight className="ml-2 w-6 h-6" />
                     </Button>
                     <Button 
                       variant="outline"
-                      className="flex-1 h-16 border-2 border-slate-200 hover:bg-slate-50 text-lg font-bold rounded-2xl active:scale-[0.98] transition-all"
+                      className="w-full sm:flex-1 h-16 sm:h-20 border-2 border-slate-200 hover:bg-slate-50 text-lg sm:text-xl font-bold rounded-2xl active:scale-[0.98] transition-all"
                       onClick={() => setView('explore')}
                     >
                       Cari Rumah Sakit <Search className="ml-2 w-5 h-5" />
@@ -681,7 +681,7 @@ export default function App() {
                 {exploreLocStatus === 'detecting' ? (
                   <div className="col-span-full py-32 text-center space-y-4">
                     <Loader2 className="w-12 h-12 animate-spin mx-auto text-teal-600" />
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mendeteksi Lokasi Kita...</p>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-[3px]">Mendeteksi Lokasi Anda...</p>
                   </div>
                 ) : exploreLocStatus === 'denied' ? (
                   <div className="col-span-full py-32 text-center space-y-4">
@@ -689,7 +689,7 @@ export default function App() {
                       <AlertTriangle className="w-8 h-8 text-red-500" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Izin Lokasi Ditolak</h3>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">Kita memerlukan akses lokasi untuk menemukan fasilitas kesehatan terdekat darurat di sekitar kita.</p>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Anda memerlukan akses lokasi untuk menemukan fasilitas kesehatan terdekat darurat di sekitar anda.</p>
                     <Button onClick={requestLocation} className="mt-4 bg-teal-600 hover:bg-teal-700 font-bold px-8">Refresh Izin Lokasi</Button>
                   </div>
                 ) : isExploreLoading ? (
@@ -703,7 +703,7 @@ export default function App() {
                       <Search className="w-8 h-8 text-slate-300" />
                     </div>
                     <h3 className="text-xl font-bold text-slate-800">Tidak Ada Faskes Ditemukan</h3>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">Tidak ada fasilitas kesehatan yang ditemukan dalam radius {exploreFilter.distance} km. Coba perlebar radius pencarian kita.</p>
+                    <p className="text-sm text-slate-500 max-w-md mx-auto">Tidak ada fasilitas kesehatan yang ditemukan dalam radius {exploreFilter.distance} km. Coba perlebar radius pencarian anda.</p>
                   </div>
                 ) : (
                   realFaskes
@@ -791,19 +791,19 @@ export default function App() {
                       value={activeInput}
                       onChange={(e) => setActiveInput(e.target.value)}
                     />
-                    <div className="px-10 py-8 bg-slate-50/50 flex justify-between items-center border-t border-slate-100">
-                      <div className="flex gap-4">
+                    <div className="px-6 py-6 sm:px-10 sm:py-8 bg-slate-50/50 flex flex-col sm:flex-row gap-6 justify-between items-center border-t border-slate-100">
+                      <div className="flex gap-4 w-full sm:w-auto justify-center sm:justify-start">
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className={`w-12 h-12 rounded-full transition-all ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-white text-slate-400 border border-slate-200 hover:text-teal-600'}`}
+                          className={`w-14 h-14 sm:w-12 sm:h-12 rounded-full transition-all ${isListening ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-white text-slate-400 border border-slate-200 hover:text-teal-600'}`}
                           onClick={isListening ? stopListening : startListening}
                         >
                           {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
                         </Button>
                       </div>
                       <Button 
-                        className="bg-[#0F766E] hover:bg-[#115E59] rounded-2xl px-10 h-14 font-black transition-all shadow-xl shadow-teal-900/20 active:scale-95"
+                        className="w-full sm:w-auto bg-[#0F766E] hover:bg-[#115E59] rounded-2xl px-10 h-16 sm:h-20 font-black transition-all shadow-xl shadow-teal-900/20 active:scale-95 text-lg"
                         onClick={handleStartAnalysis}
                         disabled={!activeInput.trim()}
                       >
