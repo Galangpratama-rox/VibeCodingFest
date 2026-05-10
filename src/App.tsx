@@ -27,7 +27,9 @@ import {
   History as HistoryIconLucide,
   Map as MapIcon,
   LogOut,
-  User as UserIcon
+  User as UserIcon,
+  LogIn,
+  UserPlus
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from './components/ui/card';
@@ -49,6 +51,7 @@ import { db, handleFirestoreError, OperationType } from './lib/firebase';
 export default function App() {
   const { user, signOut } = useAuth();
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [history, setHistory] = useState<MedicalHistory[]>([]);
   const [currentResult, setCurrentResult] = useState<DiagnosisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -188,7 +191,7 @@ export default function App() {
 
   return (
     <div id="app-container" className={`min-h-screen flex flex-col ${isEmergency ? 'emergency-mode' : 'bg-[#F8FAFC]'}`}>
-      <Toaster position="top-center" offset={80} />
+      <Toaster position="bottom-right" richColors expand={true} />
       
       {/* Header */}
       <header className="h-16 flex items-center justify-between px-6 bg-white border-b border-slate-200 z-50 sticky top-0 shadow-sm w-full">
@@ -250,8 +253,9 @@ export default function App() {
                   if (user) {
                     setView('history');
                   } else {
+                    setAuthMode('login');
                     setIsAuthModalOpen(true);
-                    toast.info("Silakan login untuk melihat riwayat pemeriksaan kita.");
+                    toast.info("Silakan login untuk melihat riwayat pemeriksaan anda.");
                   }
                 }} 
                 className={`rounded-full hidden sm:flex ${view === 'history' ? 'bg-teal-50 text-teal-600' : ''}`}
@@ -265,7 +269,7 @@ export default function App() {
                 <img 
                   src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=0F766E&color=fff`} 
                   alt="Profile" 
-                  className="w-7 h-7 rounded-full shadow-sm"
+                  className="w-8 h-8 rounded-full shadow-sm"
                 />
                 <button 
                   onClick={() => signOut()}
@@ -277,20 +281,29 @@ export default function App() {
                   variant="ghost" 
                   size="icon" 
                   onClick={() => signOut()} 
-                  className="sm:hidden w-7 h-7"
+                  className="sm:hidden w-8 h-8"
                 >
                   <LogOut className="w-4 h-4 text-slate-400" />
                 </Button>
               </div>
             ) : (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setIsAuthModalOpen(true)}
-                className="rounded-full border-slate-200 text-slate-600 font-bold px-4 h-9 text-xs"
-              >
-                Masuk
-              </Button>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => { setAuthMode('login'); setIsAuthModalOpen(true); }}
+                  className="rounded-full border-slate-200 text-slate-600 font-bold px-3 sm:px-4 h-8 sm:h-9 text-[10px] sm:text-xs"
+                >
+                  Sign
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={() => { setAuthMode('signup'); setIsAuthModalOpen(true); }}
+                  className="rounded-full bg-teal-600 hover:bg-teal-700 text-white font-bold px-3 sm:px-4 h-8 sm:h-9 text-[10px] sm:text-xs shadow-sm whitespace-nowrap"
+                >
+                  Sign Up
+                </Button>
+              </div>
             )}
 
             <Button 
@@ -349,8 +362,9 @@ export default function App() {
                     onClick={() => {
                       if (item.id === 'history' && !user) {
                         setIsMobileMenuOpen(false);
+                        setAuthMode('login');
                         setIsAuthModalOpen(true);
-                        toast.info("Silakan login untuk melihat riwayat pemeriksaan kita.");
+                        toast.info("Silakan login untuk melihat riwayat pemeriksaan anda.");
                         return;
                       }
                       setView(item.id as any);
@@ -362,6 +376,52 @@ export default function App() {
                     <span className="text-sm">{item.label}</span>
                   </button>
                 ))}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-3">
+                {user ? (
+                  <div className="flex flex-col gap-3 p-4 bg-slate-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={user.photoURL || `https://ui-avatars.com/api/?name=${user.email}&background=0F766E&color=fff`} 
+                        alt="Profile" 
+                        className="w-12 h-12 rounded-full shadow-md border-2 border-white"
+                      />
+                      <div className="flex-1 overflow-hidden">
+                        <p className="text-sm font-bold text-slate-900 truncate">{user.displayName || user.email?.split('@')[0]}</p>
+                        <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => { signOut(); setIsMobileMenuOpen(false); }}
+                      className="w-full rounded-xl border-slate-200 text-red-500 font-bold h-12 text-sm gap-2 mt-2"
+                    >
+                      <LogOut className="w-4 h-4" /> Keluar
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => { setAuthMode('login'); setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                      className="w-full rounded-2xl border-slate-200 text-slate-700 font-bold h-14 text-sm flex flex-col gap-1 items-center justify-center p-0"
+                    >
+                      <LogIn className="w-5 h-5 text-teal-600" />
+                      Sign
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      onClick={() => { setAuthMode('signup'); setIsAuthModalOpen(true); setIsMobileMenuOpen(false); }}
+                      className="w-full rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold h-14 text-sm flex flex-col gap-1 items-center justify-center p-0 shadow-lg shadow-teal-600/10"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                      Sign Up
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="mt-auto pt-6 border-t border-slate-100 italic text-[10px] text-slate-400 text-center">
@@ -390,10 +450,10 @@ export default function App() {
                     </Badge>
                   </div>
                   <h2 className="text-4xl md:text-6xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
-                    Kesehatan Kita, <span className="text-teal-600">Prioritas Tercepat</span> Kita.
+                    Kesehatan Anda, <span className="text-teal-600">Prioritas Tercepat</span> Anda.
                   </h2>
                   <p className="text-slate-500 text-lg md:text-xl leading-relaxed">
-                    Asisten medis berbasis AI yang siap mendengarkan keluhan kita dan memberikan panduan darurat serta navigasi faskes terdekat dalam hitungan detik.
+                    Asisten medis berbasis AI yang siap mendengarkan keluhan anda dan memberikan panduan darurat serta navigasi faskes terdekat dalam hitungan detik.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-4">
                     <Button 
@@ -446,7 +506,7 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-lg">AI Voice Analysis</h4>
-                    <p className="text-sm text-slate-500 leading-relaxed">Teknologi pengenalan suara canggih untuk memproses keluhan medis kita dengan akurasi tinggi.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">Teknologi pengenalan suara canggih untuk memproses keluhan medis anda dengan akurasi tinggi.</p>
                   </div>
                 </div>
 
@@ -466,15 +526,15 @@ export default function App() {
                   </div>
                   <div>
                     <h4 className="font-bold text-slate-800 text-lg">Faskes Finder</h4>
-                    <p className="text-sm text-slate-500 leading-relaxed">Navigasi cerdas ke unit gawat darurat dan klinik terdekat berdasarkan lokasi real-time kita.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed">Navigasi cerdas ke unit gawat darurat dan klinik terdekat berdasarkan lokasi real-time anda.</p>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-8 md:p-12 mb-20">
-                <div className="max-w-3xl mx-auto text-center space-y-6">
-                  <h3 className="text-2xl md:text-3xl font-bold text-slate-800">Misi Kami: Menyelamatkan Nyawa Melalui Teknologi</h3>
-                  <p className="text-slate-600 text-lg leading-relaxed">
+              <div className="bg-slate-50 border border-slate-200 rounded-3xl p-6 sm:p-8 md:p-12 mb-12 sm:mb-20">
+                <div className="max-w-3xl mx-auto text-center space-y-4 sm:space-y-6">
+                  <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 px-2">Misi Kami: Menyelamatkan Nyawa Melalui Teknologi</h3>
+                  <p className="text-slate-600 text-sm sm:text-lg leading-relaxed px-2">
                     MedisCek hadir sebagai jembatan informasi antara pasien dan tenaga medis profesional di saat-saat paling krusial. Kami berkomitmen untuk menyediakan akses kesehatan yang merata dan responsif melalui inovasi AI.
                   </p>
                   <div className="flex justify-center gap-8 pt-4">
@@ -495,44 +555,44 @@ export default function App() {
               </div>
 
               {/* FAQ Section */}
-              <div className="max-w-3xl mx-auto mb-20 space-y-8">
-                <div className="text-center space-y-4">
-                  <h3 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Pertanyaan Umum</h3>
-                  <p className="text-slate-500 text-lg">Temukan jawaban atas pertanyaan seputar penggunaan MedisCek.</p>
+              <div className="max-w-3xl mx-auto mb-16 sm:mb-20 space-y-6 sm:space-y-8 px-4 sm:px-0">
+                <div className="text-center space-y-2 sm:space-y-4">
+                  <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 tracking-tight">Pertanyaan Umum</h3>
+                  <p className="text-slate-500 text-sm sm:text-lg">Temukan jawaban atas pertanyaan seputar penggunaan MedisCek.</p>
                 </div>
                 
-                <Accordion type="single" collapsible className="w-full space-y-4">
-                  <AccordionItem value="item-1" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apa itu MedisCek?</AccordionTrigger>
-                    <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
+                <Accordion type="single" collapsible className="w-full space-y-3 sm:space-y-4">
+                  <AccordionItem value="item-1" className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-6 data-[state=open]:shadow-md transition-all">
+                    <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-slate-800 hover:no-underline py-4 sm:py-6">Apa itu MedisCek?</AccordionTrigger>
+                    <AccordionContent className="text-slate-600 leading-relaxed text-sm sm:text-base pb-4 sm:pb-6">
                       MedisCek adalah platform kesehatan berbasis AI yang membantu pengguna menganalisis gejala, mendeteksi kondisi darurat, dan menemukan fasilitas kesehatan terdekat secara real-time.
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="item-2" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah hasil analisis AI akurat?</AccordionTrigger>
-                    <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
-                      Sistem AI kita dirancang untuk memberikan analisis awal berdasarkan gejala yang kita berikan. Hasil ini bukan pengganti diagnosis dokter, namun dapat membantu menentukan langkah awal yang tepat.
+                  <AccordionItem value="item-2" className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-6 data-[state=open]:shadow-md transition-all">
+                    <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-slate-800 hover:no-underline py-4 sm:py-6">Apakah hasil analisis AI akurat?</AccordionTrigger>
+                    <AccordionContent className="text-slate-600 leading-relaxed text-sm sm:text-base pb-4 sm:pb-6">
+                      Sistem AI anda dirancang untuk memberikan analisis awal berdasarkan gejala yang anda berikan. Hasil ini bukan pengganti diagnosis dokter, namun dapat membantu menentukan langkah awal yang tepat.
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="item-3" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Bagaimana sistem darurat bekerja?</AccordionTrigger>
-                    <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
+                  <AccordionItem value="item-3" className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-6 data-[state=open]:shadow-md transition-all">
+                    <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-slate-800 hover:no-underline py-4 sm:py-6">Bagaimana sistem darurat bekerja?</AccordionTrigger>
+                    <AccordionContent className="text-slate-600 leading-relaxed text-sm sm:text-base pb-4 sm:pb-6">
                       Jika gejala terdeteksi berisiko tinggi, MedisCek akan memberikan peringatan darurat dan menyarankan tindakan medis segera, termasuk akses menuju rumah sakit atau layanan darurat.
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="item-4" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah lokasi saya aman?</AccordionTrigger>
-                    <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
+                  <AccordionItem value="item-4" className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-6 data-[state=open]:shadow-md transition-all">
+                    <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-slate-800 hover:no-underline py-4 sm:py-6">Apakah lokasi saya aman?</AccordionTrigger>
+                    <AccordionContent className="text-slate-600 leading-relaxed text-sm sm:text-base pb-4 sm:pb-6">
                       Ya, data lokasi hanya digunakan untuk menemukan fasilitas kesehatan terdekat dan tidak dibagikan tanpa izin pengguna.
                     </AccordionContent>
                   </AccordionItem>
 
-                  <AccordionItem value="item-5" className="bg-white border border-slate-200 rounded-2xl px-6 data-[state=open]:shadow-md transition-all">
-                    <AccordionTrigger className="text-left text-lg font-bold text-slate-800 hover:no-underline py-6">Apakah MedisCek gratis digunakan?</AccordionTrigger>
-                    <AccordionContent className="text-slate-600 leading-relaxed text-base pb-6">
+                  <AccordionItem value="item-5" className="bg-white border border-slate-200 rounded-2xl px-4 sm:px-6 data-[state=open]:shadow-md transition-all">
+                    <AccordionTrigger className="text-left text-base sm:text-lg font-bold text-slate-800 hover:no-underline py-4 sm:py-6">Apakah MedisCek gratis digunakan?</AccordionTrigger>
+                    <AccordionContent className="text-slate-600 leading-relaxed text-sm sm:text-base pb-4 sm:pb-6">
                       Ya, seluruh fitur MedisCek saat ini dapat digunakan secara gratis, termasuk analisis gejala berbasis AI, deteksi kondisi darurat, dan pencarian fasilitas kesehatan terdekat. Kami berkomitmen menyediakan akses kesehatan digital yang mudah dijangkau untuk semua pengguna.
                     </AccordionContent>
                   </AccordionItem>
@@ -551,7 +611,7 @@ export default function App() {
                       </div>
                       <span className="text-xl font-bold text-[#0F766E] tracking-tight">MedisCek</span>
                     </div>
-                    <p className="text-sm text-slate-500 leading-relaxed max-w-xs mx-auto sm:mx-0">Platform kesehatan darurat berbasis AI yang menghubungkan kita dengan layanan medis tercepat di saat kritis.</p>
+                    <p className="text-sm text-slate-500 leading-relaxed max-w-xs mx-auto sm:mx-0">Platform kesehatan darurat berbasis AI yang menghubungkan anda dengan layanan medis tercepat di saat kritis.</p>
                   </div>
                   <div className="flex flex-col items-center sm:items-start">
                     <h5 className="font-black text-slate-900 mb-4 uppercase text-[10px] tracking-widest">Link Cepat</h5>
@@ -780,14 +840,14 @@ export default function App() {
               <div className="flex flex-col lg:flex-row gap-16 items-start">
                 <div className="flex-1 space-y-10 w-full">
                   <div className="space-y-6">
-                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">Analisis <span className="text-teal-600 italic">Cerdas</span> <br className="hidden xl:block" /> Keluhan Kita.</h2>
-                    <p className="text-slate-500 text-lg md:text-xl max-w-2xl">Teknologi AI Gemini kita mendeteksi tingkat urgensi kondisi kita secara real-time dan memberikan panduan darurat yang akurat.</p>
+                    <h2 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.1]">Analisis <span className="text-teal-600 italic">Cerdas</span> <br className="hidden xl:block" /> Keluhan Anda.</h2>
+                    <p className="text-slate-500 text-lg md:text-xl max-w-2xl">Teknologi AI Gemini anda mendeteksi tingkat urgensi kondisi anda secara real-time dan memberikan panduan darurat yang akurat.</p>
                   </div>
 
                   <div className="glass-card rounded-[32px] shadow-2xl border-4 border-white overflow-hidden bg-white hover:border-teal-500/10 transition-all">
                     <textarea 
                       className="w-full h-64 p-10 bg-transparent border-none focus:ring-0 text-2xl md:text-3xl font-medium resize-none placeholder:text-slate-200 placeholder:font-normal leading-relaxed outline-none"
-                      placeholder="Apa yang kita rasakan saat ini? Jelaskan sejelas mungkin..."
+                      placeholder="Apa yang anda rasakan saat ini? Jelaskan sejelas mungkin..."
                       value={activeInput}
                       onChange={(e) => setActiveInput(e.target.value)}
                     />
@@ -828,7 +888,7 @@ export default function App() {
                           />
                         ))}
                       </div>
-                      <p className="text-xs font-black text-teal-600 uppercase tracking-[3px] animate-pulse">Menyimak Aktif Gejala Kita...</p>
+                      <p className="text-xs font-black text-teal-600 uppercase tracking-[3px] animate-pulse">Menyimak Aktif Gejala Anda...</p>
                     </motion.div>
                   )}
                 </div>
@@ -845,7 +905,7 @@ export default function App() {
                       <h3 className="font-bold text-slate-800 text-lg">Eksplorasi UGD</h3>
                       <p className="text-[10px] text-slate-400 mt-1 uppercase font-black tracking-widest leading-loose">Temukan RS Terdekat Tanpa Analisis</p>
                     </div>
-                    <div className="glass-card p-6 rounded-3xl shadow-sm border-2 border-white transition-all hover:translate-y-[-4px] cursor-pointer bg-white group">
+                    <div className="glass-card p-6 rounded-3xl shadow-sm border-2 border-white transition-all hover:translate-y-[-4px] cursor-pointer bg-white group" onClick={() => window.open('tel:119')}>
                       <div className="w-12 h-12 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mb-4 group-hover:scale-110 transition-transform">
                         <Phone className="w-6 h-6" />
                       </div>
@@ -859,7 +919,7 @@ export default function App() {
                        <ShieldAlert className="w-20 h-20" />
                     </div>
                     <h4 className="text-[10px] font-black text-teal-400 uppercase tracking-[3px] mb-4">Privasi & Keamanan</h4>
-                    <p className="text-xs text-slate-400 leading-relaxed font-medium">Data keluhan kita dienkripsi dan diproses secara anonim untuk keamanan privasi medis kita.</p>
+                    <p className="text-xs text-slate-400 leading-relaxed font-medium">Data keluhan anda dienkripsi dan diproses secara anonim untuk keamanan privasi medis anda.</p>
                   </div>
                 </div>
               </div>
@@ -888,14 +948,14 @@ export default function App() {
                     <div className="absolute top-8 left-16 right-0 h-0.5 bg-slate-100 hidden md:block" />
                     <div className="bg-white p-2 rounded-2xl">
                       <h5 className="text-xl font-bold text-slate-800 mb-3">Triase Urgensi</h5>
-                      <p className="text-sm text-slate-500 leading-relaxed">Sistem menentukan apakah kondisi kita masuk kategori Hijau, Kuning, atau Merah (Gawat Darurat).</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">Sistem menentukan apakah kondisi anda masuk kategori Hijau, Kuning, atau Merah (Gawat Darurat).</p>
                     </div>
                   </div>
                   <div className="space-y-6">
                     <div className="w-16 h-16 bg-teal-600 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-teal-600/30">03</div>
                     <div className="bg-white p-2 rounded-2xl">
                       <h5 className="text-xl font-bold text-slate-800 mb-3">Navigasi Langsung</h5>
-                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, kita akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat di sekitar kita.</p>
+                      <p className="text-sm text-slate-500 leading-relaxed">Dalam hitungan detik, anda akan diarahkan ke unit gawat darurat atau klinik pengobatan spesialis terdekat di sekitar anda.</p>
                     </div>
                   </div>
                 </div>
@@ -1075,14 +1135,14 @@ export default function App() {
                     <ShieldAlert className="w-10 h-10" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Akses Terbatas Kita</h3>
-                    <p className="text-slate-500 text-sm">Silakan masuk dengan akun kita untuk melihat riwayat pemeriksaan medis secara aman.</p>
+                    <h3 className="text-2xl font-bold text-slate-800 tracking-tight">Akses Terbatas Anda</h3>
+                    <p className="text-slate-500 text-sm">Silakan masuk dengan akun anda untuk melihat riwayat pemeriksaan medis secara aman.</p>
                   </div>
                   <Button 
-                    onClick={() => setIsAuthModalOpen(true)}
+                    onClick={() => { setAuthMode('login'); setIsAuthModalOpen(true); }}
                     className="bg-teal-600 hover:bg-teal-700 font-bold px-8 rounded-xl h-12"
                   >
-                    Masuk Sekarang
+                    Sign Sekarang
                   </Button>
                 </div>
               ) : (
@@ -1173,7 +1233,11 @@ export default function App() {
           </div>
         </footer>
       )}
-      <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+      <AuthModal 
+        isOpen={isAuthModalOpen} 
+        onClose={() => setIsAuthModalOpen(false)} 
+        initialMode={authMode}
+      />
     </div>
   );
 }
